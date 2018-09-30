@@ -3,10 +3,16 @@
 /**
  * Module dependencies.
  */
-
-var app = require('../app');
-var debug = require('debug')('game-server:server');
-var http = require('http');
+require('dotenv').config()
+const uuidv4 = require('uuid/v4')
+var app = require('../app')
+var debug = require('debug')('game-server:server')
+var http = require('http')
+const rooms = {}
+const defaultRoom = {
+  name: '',
+  participants: []
+}
 
 /**
  * Get port from environment and store in Express.
@@ -20,6 +26,7 @@ app.set('port', port);
  */
 
 var server = http.createServer(app);
+var io = require('socket.io')(server)
 
 /**
  * Listen on provided port, on all network interfaces.
@@ -28,6 +35,51 @@ var server = http.createServer(app);
 server.listen(port);
 server.on('error', onError);
 server.on('listening', onListening);
+io.on('connection', socket => {
+  /*
+  socket.join(room, () => {
+    io.to(room).emit(`broadcast`, {
+      type: 'connect',
+      payload: `a new [user: ${socket.id}] has joined the [room: ${room}]`
+    }) // broadcast to everyone in the room
+  })
+  */
+  socket.on('create_room', room => {
+    rooms[uuidv4()] = {...defaultRoom, name: room}
+    console.log(rooms)
+    io.emit('room_update', rooms)
+  })
+  socket.on('join_room', room => {
+    socket.join(room, () => {
+      console.log(`the room is ${room}`)
+      rooms[room].participants.push(socket.id)
+      console.log(JSON.stringify(rooms))
+      io.to(room).emit(`broadcast`, {
+        type: 'connect',
+        payload: `a new [user: ${socket.id}] has joined the [room: ${room}]`
+      }) // broadcast to everyone in the room
+    })
+  })
+  socket.on('get_rooms', () => {
+    console.log(`event: get_rooms`)
+    socket.emit('room_update', rooms)
+  })
+  socket.on('to_server', (data) => {
+    //console.log(`received 'to_server' from ${data.from}`)
+    socket.to(room).emit('from_server', {
+      payload: data.payload
+      //from: data.from
+    }) // broadcast to everyone in the room
+  })
+  socket.on('disconnect', () => {
+    /*
+    io.to(room).emit(`broadcast`, {
+      type: 'disconnect',
+      payload: `[user: ${socket.id}] has disconnected from [room: ${room}]`
+    }) // broadcast to everyone in the room
+    */
+  })
+})
 
 /**
  * Normalize a port into a number, string, or false.
