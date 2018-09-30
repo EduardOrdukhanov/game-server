@@ -4,10 +4,15 @@
  * Module dependencies.
  */
 require('dotenv').config()
+const uuidv4 = require('uuid/v4')
 var app = require('../app')
 var debug = require('debug')('game-server:server')
 var http = require('http')
-const rooms = []
+const rooms = {}
+const defaultRoom = {
+  name: '',
+  participants: []
+}
 
 /**
  * Get port from environment and store in Express.
@@ -39,10 +44,21 @@ io.on('connection', socket => {
     }) // broadcast to everyone in the room
   })
   */
-  socket.on('create_room', (room) => {
-    rooms.push(room)
-    console.log(room)
+  socket.on('create_room', room => {
+    rooms[uuidv4()] = {...defaultRoom, name: room}
+    console.log(rooms)
     io.emit('room_update', rooms)
+  })
+  socket.on('join_room', room => {
+    socket.join(room, () => {
+      console.log(`the room is ${room}`)
+      rooms[room].participants.push(socket.id)
+      console.log(JSON.stringify(rooms))
+      io.to(room).emit(`broadcast`, {
+        type: 'connect',
+        payload: `a new [user: ${socket.id}] has joined the [room: ${room}]`
+      }) // broadcast to everyone in the room
+    })
   })
   socket.on('get_rooms', () => {
     console.log(`event: get_rooms`)
